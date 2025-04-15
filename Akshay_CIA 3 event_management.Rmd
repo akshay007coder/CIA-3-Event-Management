@@ -1,0 +1,143 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(DBI)
+library(RMySQL)  
+
+# Connect to the database
+con <- dbConnect(RMySQL::MySQL(),
+                 dbname = "event_management_sql",
+                 host = "localhost",
+                 user = "root",
+                 password = "akshay_babu_007")
+
+#===================================================================================================================
+
+# Import users table
+users <- dbReadTable(con, "users")
+
+# Import events table
+events <- dbReadTable(con, "events")
+
+# Import bookings table
+bookings <- dbReadTable(con, "bookings")
+
+# Import registrations table
+registrations <- dbReadTable(con, "registrations")
+
+# Import refunds table
+refunds <- dbReadTable(con, "refunds")
+
+#===================================================================================================================
+
+# Close the database connection after all tables are imported
+dbDisconnect(con)
+
+# View first few rows of each table to confirm the data is loaded
+head(users)
+head(events)
+head(bookings)
+head(registrations)
+head(refunds)
+
+#===================================================================================================================
+
+# User Role Distribution
+user_roles <- users %>%
+  group_by(role) %>%
+  summarise(count = n())
+
+ggplot(user_roles, aes(x = "", y = count, fill = role)) +
+  geom_col() +
+  coord_polar("y", start = 0) +
+  labs(title = "User Role Distribution") +
+  theme_void()
+
+#===================================================================================================================
+
+event_summary <- bookings %>%
+  group_by(event_id) %>%
+  summarise(vip_total = sum(vip_tickets_booked), 
+            general_total = sum(general_tickets_booked)) %>%
+  left_join(events, by = c("event_id" = "id"))
+
+ggplot(event_summary, aes(x = reorder(title, -(vip_total + general_total)), 
+                          y = vip_total + general_total)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Total Tickets Booked per Event", x = "Event", y = "Total Tickets Booked") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#===================================================================================================================
+
+price_data <- events %>%
+  select(title, vip_price, general_price) %>%
+  pivot_longer(cols = c("vip_price", "general_price"), names_to = "type", values_to = "price")
+
+ggplot(price_data, aes(x = price, fill = type)) +
+  geom_histogram(bins = 10, position = "identity", alpha = 0.6) +
+  labs(title = "Ticket Price Distribution", x = "Price", y = "Frequency") +
+  theme_minimal()
+
+#===================================================================================================================
+
+# Join bookings with events using the correct column names
+event_summary <- bookings %>%
+  left_join(events, by = c("event_id" = "id"))
+
+# Summarize total tickets booked per event
+event_summary <- bookings %>%
+  group_by(event_id) %>%
+  summarise(vip_total = sum(vip_tickets_booked), 
+            general_total = sum(general_tickets_booked)) %>%
+  left_join(events, by = c("event_id" = "id"))
+
+# Create a bar chart for total tickets booked per event
+ggplot(event_summary, aes(x = reorder(title, -(vip_total + general_total)), 
+                          y = vip_total + general_total)) +
+  geom_bar(stat = "identity", fill = "orange") +
+  labs(title = "Total Tickets Booked per Event", x = "Event", y = "Total Tickets Booked") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#===================================================================================================================
+
+heat_data <- bookings %>%
+  mutate(total_tickets = vip_tickets_booked + general_tickets_booked) %>%
+  left_join(users, by = c("user_id" = "id")) %>%
+  left_join(events, by = c("event_id" = "id")) %>%
+  select(name, title, total_tickets)
+
+ggplot(heat_data, aes(x = name, y = title, fill = total_tickets)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Heatmap of Ticket Bookings", x = "User", y = "Event") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#===================================================================================================================
+
+booking_totals <- bookings %>%
+  group_by(event_id) %>%
+  summarise(total_booked = sum(vip_tickets_booked + general_tickets_booked)) %>%
+  left_join(events, by = c("event_id" = "id"))
+
+ggplot(booking_totals, aes(x = capacity, y = total_booked)) +
+  geom_point(color = "tomato", size = 3) +
+  labs(title = "Event Capacity vs Tickets Booked", x = "Event Capacity", y = "Total Tickets Booked") +
+  geom_smooth(method = "lm", se = FALSE, color = "gray")
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
